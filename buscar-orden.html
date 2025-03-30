@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consultar Orden - Servicio Técnico</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #007BFF;
+            text-align: center;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .resultado {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            display: none;
+        }
+        .error {
+            color: #dc3545;
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+        .info-item {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .info-item strong {
+            color: #007BFF;
+        }
+        .status {
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-align: center;
+            margin: 15px 0;
+        }
+        .status-reparacion {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-reparado {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-retirar {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+        .status-entregado {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo img {
+            max-width: 150px;
+        }
+    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <!-- Reemplaza con tu logo -->
+            <img src="logo.png" alt="Logo Servicio Técnico">
+        </div>
+        
+        <h1>Consultar Estado de Reparación</h1>
+        <p>Ingrese su número de orden para ver el estado de su dispositivo:</p>
+        
+        <div class="input-group">
+            <input type="text" id="numeroOrden" placeholder="Ej: ORD1234" required>
+            <button onclick="buscarOrden()">Buscar Orden</button>
+        </div>
+        
+        <div id="errorMsg" class="error">
+            No se encontró ninguna orden con ese número. Por favor verifique e intente nuevamente.
+        </div>
+        
+        <div id="resultado" class="resultado">
+            <h2>Información de su Orden</h2>
+            
+            <div class="info-item">
+                <strong>Número de Orden:</strong> <span id="ordenNumero"></span>
+            </div>
+            
+            <div class="info-item">
+                <strong>Cliente:</strong> <span id="ordenCliente"></span>
+            </div>
+            
+            <div class="info-item">
+                <strong>Dispositivo:</strong> <span id="ordenDispositivo"></span>
+            </div>
+            
+            <div class="info-item">
+                <strong>Problema reportado:</strong> <span id="ordenProblema"></span>
+            </div>
+            
+            <div class="info-item">
+                <strong>Fecha de recepción:</strong> <span id="ordenFecha"></span>
+            </div>
+            
+            <div class="info-item">
+                <strong>Costo estimado:</strong> $<span id="ordenCosto"></span>
+            </div>
+            
+            <div id="ordenEstado" class="status"></div>
+            
+            <button onclick="generarComprobante()">Descargar Comprobante</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuración de Firebase (DEBE SER LA MISMA QUE EN EL ARCHIVO PRINCIPAL)
+        const firebaseConfig = {
+            apiKey: "AIzaSyA3tR8Xw3YQ1YQ2YQ3YQ4YQ5YQ6YQ7YQ8",
+            authDomain: "tu-proyecto.firebaseapp.com",
+            projectId: "tu-proyecto",
+            storageBucket: "tu-proyecto.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abcdef1234567890"
+        };
+        
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        
+        // Variable para almacenar la orden encontrada
+        let ordenActual = null;
+        
+        // Función para buscar la orden
+        async function buscarOrden() {
+            const numeroOrden = document.getElementById('numeroOrden').value.trim();
+            const resultado = document.getElementById('resultado');
+            const errorMsg = document.getElementById('errorMsg');
+            
+            // Ocultar resultados anteriores
+            resultado.style.display = 'none';
+            errorMsg.style.display = 'none';
+            
+            if (!numeroOrden) {
+                errorMsg.textContent = "Por favor ingrese un número de orden";
+                errorMsg.style.display = 'block';
+                return;
+            }
+            
+            try {
+                const querySnapshot = await db.collection("ordenes")
+                    .where("numeroSeguimiento", "==", numeroOrden)
+                    .get();
+                
+                if (!querySnapshot.empty) {
+                    ordenActual = querySnapshot.docs[0].data();
+                    mostrarOrden(ordenActual);
+                    resultado.style.display = 'block';
+                } else {
+                    errorMsg.textContent = "No se encontró ninguna orden con ese número. Por favor verifique e intente nuevamente.";
+                    errorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                console.error("Error al buscar orden:", error);
+                errorMsg.textContent = "Ocurrió un error al buscar la orden. Por favor intente nuevamente.";
+                errorMsg.style.display = 'block';
+            }
+        }
+        
+        // Función para mostrar los detalles de la orden
+        function mostrarOrden(orden) {
+            document.getElementById('ordenNumero').textContent = orden.numeroSeguimiento;
+            document.getElementById('ordenCliente').textContent = orden.nombreCliente;
+            document.getElementById('ordenDispositivo').textContent = `${orden.modeloTelefono} (IMEI: ${orden.imeiTelefono})`;
+            document.getElementById('ordenProblema').textContent = orden.descripcionProblema;
+            document.getElementById('ordenFecha').textContent = orden.fechaRecepcion;
+            document.getElementById('ordenCosto').textContent = orden.costoEstimado;
+            
+            const estadoElement = document.getElementById('ordenEstado');
+            estadoElement.textContent = `Estado: ${orden.estado}`;
+            
+            // Remover todas las clases de estado
+            estadoElement.className = 'status';
+            
+            // Añadir clase según el estado
+            switch(orden.estado) {
+                case 'En Reparación':
+                    estadoElement.classList.add('status-reparacion');
+                    break;
+                case 'Reparado':
+                    estadoElement.classList.add('status-reparado');
+                    break;
+                case 'Para Retirar':
+                    estadoElement.classList.add('status-retirar');
+                    break;
+                case 'Entregado':
+                    estadoElement.classList.add('status-entregado');
+                    break;
+                default:
+                    estadoElement.classList.add('status-reparacion');
+            }
+        }
+        
+        // Función para generar el comprobante en PDF
+        function generarComprobante() {
+            if (!ordenActual) return;
+            
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Encabezado
+            doc.setFontSize(18);
+            doc.setTextColor(0, 0, 139); // Azul oscuro
+            doc.text("Comprobante de Servicio Técnico", 60, 20);
+            
+            // Logo (opcional)
+            // doc.addImage(logoData, 'PNG', 85, 30, 40, 40);
+            
+            // Información de la orden
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0); // Negro
+            
+            let y = 50;
+            const addField = (label, value) => {
+                doc.setFont(undefined, 'bold');
+                doc.text(`${label}:`, 20, y);
+                doc.setFont(undefined, 'normal');
+                doc.text(value, 20 + doc.getTextWidth(label + ": "), y);
+                y += 10;
+            };
+            
+            addField("Número de Orden", ordenActual.numeroSeguimiento);
+            addField("Cliente", ordenActual.nombreCliente);
+            addField("Teléfono", ordenActual.telefonoCliente);
+            addField("Dispositivo", ordenActual.modeloTelefono);
+            addField("IMEI", ordenActual.imeiTelefono);
+            addField("Problema reportado", ordenActual.descripcionProblema);
+            addField("Fecha de recepción", ordenActual.fechaRecepcion);
+            addField("Estado", ordenActual.estado);
+            addField("Costo estimado", `$${ordenActual.costoEstimado}`);
+            
+            // Pie de página
+            y += 20;
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            doc.text("Gracias por confiar en nuestro servicio técnico", 60, y);
+            y += 5;
+            doc.text("Para consultas, contactar al: +54 3751 316169", 50, y);
+            
+            // Guardar el PDF
+            doc.save(`comprobante_${ordenActual.numeroSeguimiento}.pdf`);
+        }
+    </script>
+</body>
+</html>
